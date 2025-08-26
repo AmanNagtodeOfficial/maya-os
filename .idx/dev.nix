@@ -5,6 +5,7 @@
     pkgs.gcc
     pkgs.gdb
     pkgs.qemu
+    pkgs.make
   ];
 
   idx.extensions = [
