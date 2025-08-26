@@ -1,6 +1,4 @@
 {
-  pkgs, ... }:
-{
   packages = [
     pkgs.gcc
     pkgs.gdb
