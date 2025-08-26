@@ -25,29 +25,29 @@ align 4
                 ; Set up stack
                     mov esp, stack_top
                         
-                        ; Push multiboot info to stack for kernel
-                            push ebx    ; Multiboot info structure
-                                push eax    ; Multiboot magic number
-                                    
-                                        ; Initialize GDT and IDT
-                                            call gdt_flush
-                                                call idt_install
-                                                    
-                                                        ; Enable interrupts
-                                                            sti
-                                                                
-                                                                    ; Call kernel main
-                                                                        call kernel_main
-                                                                            
-                                                                                ; Halt if kernel returns
-                                                                                .halt:
-                                                                                    cli
-                                                                                        hlt
-                                                                                            jmp .halt
+                            ; Push multiboot info to stack for kernel
+                                push ebx    ; Multiboot info structure
+                                    push eax    ; Multiboot magic number
+                                        
+                                            ; Initialize GDT and IDT
+                                                call gdt_flush
+                                                    call idt_install
+                                                        
+                                                            ; Enable interrupts
+                                                                sti
+                                                                    
+                                                                        ; Call kernel main
+                                                                            call kernel_main
+                                                                                
+                                                                                    ; Halt if kernel returns
+                                                                                    .halt:
+                                                                                        cli
+                                                                                            hlt
+                                                                                                jmp .halt
 
-                                                                                            section .bss
-                                                                                            align 16
-                                                                                            stack_bottom:
-                                                                                            resb 16384  ; 16 KiB stack
-                                                                                            stack_top:
-                                                                                            
+                                                                                                section .bss
+                                                                                                align 16
+                                                                                                stack_bottom:
+                                                                                                resb 16384  ; 16 KiB stack
+                                                                                                stack_top:
+                                                                                                
