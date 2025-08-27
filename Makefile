@@ -22,15 +22,16 @@ BOOT_ASM = boot/boot.asm boot/gdt.asm boot/idt.asm
 KERNEL_C = kernel/kernel.c kernel/memory.c kernel/interrupts.c kernel/keyboard.c \
 	   kernel/timer.c kernel/process.c
 DRIVER_C = drivers/vga.c drivers/serial.c drivers/pci.c drivers/ata.c
-LIBC_C = libc/string.c libc/stdio.c libc/stdlib.c libc/memory.c
-GUI_C = gui/window.c gui/graphics.c gui/widgets.c gui/desktop.c
+LIBC_C = libc/string.c libc/stdio.c libc/stdlib.c libc/memory.c libc/assert.c
+GUI_C = gui/window.c gui/graphics.c gui/widgets.c gui/desktop.c \
+	gui/maya_desktop.c gui/maya_graphics.c gui/maya_input.c gui/maya_apps.c
 FS_C = fs/fat32.c fs/vfs.c fs/file.c
 
 # Object files
 BOOT_OBJ = $(BOOT_ASM:%.asm=$(BUILDDIR)/%.o)
 KERNEL_OBJ = $(KERNEL_C:%.c=$(BUILDDIR)/%.o)
 DRIVER_OBJ = $(DRIVER_C:%.c=$(BUILDDIR)/%.o)
-LIBC_OBJ = $(LIBC_C:%.c=$(BUILDDIR)/%.o)
+LIBC_OBJ = $(LIBC_C:%.c=$(BUILDDIR)/%.o) $(BUILDDIR)/libc/assert.o
 GUI_OBJ = $(GUI_C:%.c=$(BUILDDIR)/%.o)
 FS_OBJ = $(FS_C:%.c=$(BUILDDIR)/%.o)
 
