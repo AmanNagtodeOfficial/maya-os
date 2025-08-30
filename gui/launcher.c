@@ -1,123 +1,156 @@
+/**
+ * Maya OS GUI Launcher
+ * Updated: 2025-08-29 10:52:34 UTC
+ * Author: AmanNagtodeOfficial
+ */
+
 #include "gui/launcher.h"
 #include "gui/graphics.h"
 #include "kernel/memory.h"
 #include "libc/string.h"
 
+#define MAX_LAUNCHER_ITEMS 32
+#define MIN_ITEM_HEIGHT 32
+#define MAX_ITEM_HEIGHT 64
+
 static launcher_t launcher;
 
-void launcher_init(void) {
+bool launcher_init(void) {
+    // Clear launcher structure
     memset(&launcher, 0, sizeof(launcher_t));
-    launcher.visible = 1;
-    launcher.auto_hide = 0;
-
+    
+    // Validate screen dimensions
+    if (SCREEN_WIDTH < LAUNCHER_WIDTH || SCREEN_HEIGHT < TASKBAR_HEIGHT) {
+        return false;
+    }
+    
+    // Initialize launcher properties
+    launcher.visible = true;
+    launcher.auto_hide = false;
+    launcher.item_count = 0;
+    launcher.selected_item = -1;
+    
     // Add default applications
-    launcher_add_default_items();
+    if (!launcher_add_default_items()) {
+        return false;
+    }
+    
+    return true;
+}
+
+bool launcher_add_item(const char *name, const char *icon_path, void (*callback)(void)) {
+    if (launcher.item_count >= MAX_LAUNCHER_ITEMS) {
+        return false;
+    }
+    
+    launcher_item_t *item = &launcher.items[launcher.item_count];
+    
+    // Validate parameters
+    if (!name || strlen(name) >= MAX_ITEM_NAME_LENGTH) {
+        return false;
+    }
+    
+    // Initialize item
+    strncpy(item->name, name, MAX_ITEM_NAME_LENGTH - 1);
+    item->name[MAX_ITEM_NAME_LENGTH - 1] = '\0';
+    
+    if (icon_path) {
+        strncpy(item->icon_path, icon_path, MAX_PATH_LENGTH - 1);
+        item->icon_path[MAX_PATH_LENGTH - 1] = '\0';
+    } else {
+        item->icon_path[0] = '\0';
+    }
+    
+    item->callback = callback;
+    item->enabled = true;
+    
+    launcher.item_count++;
+    return true;
 }
 
 void launcher_render(void) {
     if (!launcher.visible) return;
-
-    // Draw launcher background (semi-transparent dark)
-    graphics_fill_rect(0, TASKBAR_HEIGHT, LAUNCHER_WIDTH,
-                           SCREEN_HEIGHT - TASKBAR_HEIGHT,
-                           UBUNTU_LAUNCHER_BG);
-
-    // Draw right border
+    
+    // Draw launcher background
+    graphics_fill_rect(0, TASKBAR_HEIGHT, 
+                      LAUNCHER_WIDTH,
+                      SCREEN_HEIGHT - TASKBAR_HEIGHT,
+                      MAYA_LAUNCHER_BG);
+    
+    // Draw border
     graphics_draw_line(LAUNCHER_WIDTH - 1, TASKBAR_HEIGHT,
-                       LAUNCHER_WIDTH - 1, SCREEN_HEIGHT,
-                       UBUNTU_BORDER_COLOR);
-
-    // Draw launcher items
-    int y_offset = TASKBAR_HEIGHT + LAUNCHER_PADDING;
-
+                      LAUNCHER_WIDTH - 1, SCREEN_HEIGHT,
+                      MAYA_BORDER_COLOR);
+    
+    // Calculate item dimensions
+    int available_height = SCREEN_HEIGHT - TASKBAR_HEIGHT - (2 * LAUNCHER_PADDING);
+    int item_height = available_height / launcher.item_count;
+    
+    // Clamp item height
+    if (item_height < MIN_ITEM_HEIGHT) item_height = MIN_ITEM_HEIGHT;
+    if (item_height > MAX_ITEM_HEIGHT) item_height = MAX_ITEM_HEIGHT;
+    
+    // Draw items
+    int y = TASKBAR_HEIGHT + LAUNCHER_PADDING;
+    
     for (int i = 0; i < launcher.item_count; i++) {
         launcher_item_t *item = &launcher.items[i];
-
-        // Calculate item position
-        int item_y = y_offset + i * (LAUNCHER_ITEM_SIZE + LAUNCHER_PADDING);
-        int item_x = (LAUNCHER_WIDTH - LAUNCHER_ITEM_SIZE) / 2;
-
-        // Skip items that are scrolled out of view
-        if (item_y + LAUNCHER_ITEM_SIZE > SCREEN_HEIGHT) break;
-
-        // Draw item background if highlighted or running
-        if (item->highlighted || item->running) {
-            uint8_t bg_color = item->highlighted ? UBUNTU_HIGHLIGHT : UBUNTU_ACTIVE;
-            graphics_fill_rect(item_x - 2, item_y - 2,
-                               LAUNCHER_ITEM_SIZE + 4, LAUNCHER_ITEM_SIZE + 4,
-                               bg_color);
+        
+        if (!item->enabled) continue;
+        
+        // Draw item background
+        uint32_t bg_color = (i == launcher.selected_item) ? 
+                           MAYA_SELECTED_BG : MAYA_LAUNCHER_BG;
+        
+        graphics_fill_rect(LAUNCHER_PADDING, y,
+                          LAUNCHER_WIDTH - (2 * LAUNCHER_PADDING),
+                          item_height, bg_color);
+        
+        // Draw icon if available
+        if (item->icon_path[0] != '\0') {
+            // TODO: Implement icon rendering
         }
-
-        // Draw item icon
-        if (item->icon_data) {
-            graphics_draw_icon(item_x, item_y, item->icon_data);
-        } else {
-            // Draw default application icon
-            graphics_fill_rect(item_x, item_y, LAUNCHER_ITEM_SIZE, LAUNCHER_ITEM_SIZE,
-                               UBUNTU_DEFAULT_ICON);
-            graphics_draw_string(item_x + 8, item_y + 20, "App", WHITE);
-        }
-
-        // Draw running indicator
-        if (item->running) {
-            graphics_fill_rect(0, item_y + 20, 3, 8, UBUNTU_ORANGE);
-        }
+        
+        // Draw item name
+        graphics_draw_text(item->name,
+                          LAUNCHER_PADDING + 40, // Leave space for icon
+                          y + (item_height / 2) - 8,
+                          MAYA_TEXT_COLOR);
+        
+        y += item_height;
     }
 }
 
-void launcher_add_item(const char *name, const char *command, uint8_t *icon) {
-    if (launcher.item_count >= MAX_LAUNCHER_ITEMS) return;
-
-    launcher_item_t *item = &launcher.items[launcher.item_count];
-
-    item->name = kmalloc(strlen(name) + 1);
-    strcpy(item->name, name);
-
-    item->command = kmalloc(strlen(command) + 1);
-    strcpy(item->command, command);
-
-    item->icon_data = icon;
-    item->pinned = 1;
-    item->running = 0;
-    item->highlighted = 0;
-
-    launcher.item_count++;
-}
-
-static void launcher_add_default_items(void) {
-    launcher_add_item("Files", "file_manager", NULL);
-    launcher_add_item("Terminal", "terminal", NULL);
-    launcher_add_item("Text Editor", "text_editor", NULL);
-    launcher_add_item("Calculator", "calculator", NULL);
-    launcher_add_item("System Settings", "settings", NULL);
-}
-
-void launcher_handle_click(int x, int y) {
-    if (x >= LAUNCHER_WIDTH) return;
-
-    // Calculate which item was clicked
-    int item_index = (y - TASKBAR_HEIGHT - LAUNCHER_PADDING) /
-                     (LAUNCHER_ITEM_SIZE + LAUNCHER_PADDING);
-
-    if (item_index >= 0 && item_index < launcher.item_count) {
-        launcher_item_t *item = &launcher.items[item_index];
-
-        // Execute application
-        launcher_execute_item(item);
+bool launcher_handle_click(int x, int y) {
+    if (!launcher.visible) return false;
+    
+    // Check if click is within launcher bounds
+    if (x < 0 || x >= LAUNCHER_WIDTH ||
+        y < TASKBAR_HEIGHT || y >= SCREEN_HEIGHT) {
+        return false;
     }
-}
-
-static void launcher_execute_item(launcher_item_t *item) {
-    // Mark as running
-    item->running = 1;
-
-    // Execute the command (simplified)
-    if (strcmp(item->command, "file_manager") == 0) {
-        file_manager_t *fm = file_manager_create();
-        file_manager_open_directory(fm, "/home");
-    } else if (strcmp(item->command, "terminal") == 0) {
-        // Launch terminal
-        terminal_create();
+    
+    // Calculate item height
+    int available_height = SCREEN_HEIGHT - TASKBAR_HEIGHT - (2 * LAUNCHER_PADDING);
+    int item_height = available_height / launcher.item_count;
+    
+    // Clamp item height
+    if (item_height < MIN_ITEM_HEIGHT) item_height = MIN_ITEM_HEIGHT;
+    if (item_height > MAX_ITEM_HEIGHT) item_height = MAX_ITEM_HEIGHT;
+    
+    // Calculate clicked item
+    int item_y = TASKBAR_HEIGHT + LAUNCHER_PADDING;
+    
+    for (int i = 0; i < launcher.item_count; i++) {
+        if (y >= item_y && y < item_y + item_height) {
+            if (launcher.items[i].enabled && launcher.items[i].callback) {
+                launcher.items[i].callback();
+                return true;
+            }
+            break;
+        }
+        item_y += item_height;
     }
-    // Add more application launches as needed
+    
+    return false;
 }

@@ -1,294 +1,227 @@
+/**
+ * Maya OS ATA Driver
+ * Updated: 2025-08-29 11:15:07 UTC
+ * Author: AmanNagtodeOfficial
+ */
+
 #include "drivers/ata.h"
-#include "kernel/kernel.h"
+#include "kernel/io.h"
 #include "kernel/interrupts.h"
-#include "libc/stdio.h"
 #include "libc/string.h"
 
-// ATA commands
-#define ATA_CMD_READ_SECTORS 0x20
-#define ATA_CMD_WRITE_SECTORS 0x30
+#define ATA_PRIMARY_IO 0x1F0
+#define ATA_SECONDARY_IO 0x170
+
+#define ATA_REG_DATA 0x00
+#define ATA_REG_ERROR 0x01
+#define ATA_REG_FEATURES 0x01
+#define ATA_REG_SECCOUNT0 0x02
+#define ATA_REG_LBA0 0x03
+#define ATA_REG_LBA1 0x04
+#define ATA_REG_LBA2 0x05
+#define ATA_REG_HDDEVSEL 0x06
+#define ATA_REG_COMMAND 0x07
+#define ATA_REG_STATUS 0x07
+
+#define ATA_CMD_READ_PIO 0x20
+#define ATA_CMD_WRITE_PIO 0x30
 #define ATA_CMD_IDENTIFY 0xEC
-#define ATA_CMD_FLUSH_CACHE 0xE7
 
-// ATA status bits
-#define ATA_STATUS_ERR  0x01
-#define ATA_STATUS_DRQ  0x08
-#define ATA_STATUS_SRV  0x10
-#define ATA_STATUS_DF   0x20
-#define ATA_STATUS_RDY  0x40
-#define ATA_STATUS_BSY  0x80
+#define ATA_STATUS_BSY 0x80
+#define ATA_STATUS_DRDY 0x40
+#define ATA_STATUS_DRQ 0x08
+#define ATA_STATUS_ERR 0x01
 
-// Drive selection bits
-#define ATA_DRIVE_MASTER 0xA0
-#define ATA_DRIVE_SLAVE  0xB0
+typedef struct {
+    uint16_t flags;
+    uint16_t cylinders;
+    uint16_t reserved1;
+    uint16_t heads;
+    uint16_t reserved2[2];
+    uint16_t sectors;
+    uint16_t reserved3[3];
+    char serial[20];
+    uint16_t reserved4[2];
+    uint16_t buffer_size;
+    char firmware[8];
+    char model[40];
+    uint16_t reserved5[33];
+    uint16_t capabilities;
+    uint16_t reserved6[12];
+    uint16_t sectors_28[2];
+    uint16_t reserved7[22];
+    uint16_t sectors_48[4];
+} __attribute__((packed)) ata_identify_t;
 
-static uint8_t ata_drives[4] = {0}; // Track which drives exist
+static struct {
+    uint16_t io_base;
+    uint16_t control_base;
+    bool is_slave;
+    ata_identify_t identify;
+    bool initialized;
+} ata_state;
 
-static void ata_wait_400ns(uint16_t port) {
-    // Read alternate status register 4 times (400ns delay)
-    inb(port + 6);
-    inb(port + 6);
-    inb(port + 6);
-    inb(port + 6);
+static void ata_wait_bsy(void) {
+    while (inb(ata_state.io_base + ATA_REG_STATUS) & ATA_STATUS_BSY);
 }
 
-static uint8_t ata_wait_ready(uint16_t port) {
-    uint32_t timeout = 10000;
-    uint8_t status;
-    
-    while (timeout--) {
-        status = inb(port + 7);
-        if (!(status & ATA_STATUS_BSY) && (status & ATA_STATUS_RDY)) {
-            return 0; // Ready
-        }
-    }
-    
-    return 1; // Timeout
+static void ata_wait_drq(void) {
+    while (!(inb(ata_state.io_base + ATA_REG_STATUS) & ATA_STATUS_DRQ));
 }
 
-static uint8_t ata_wait_drq(uint16_t port) {
-    uint32_t timeout = 10000;
-    uint8_t status;
-    
-    while (timeout--) {
-        status = inb(port + 7);
-        if (!(status & ATA_STATUS_BSY) && (status & ATA_STATUS_DRQ)) {
-            return 0; // Data ready
-        }
-        if (status & ATA_STATUS_ERR) {
-            return 2; // Error
-        }
-    }
-    
-    return 1; // Timeout
-}
-
-static void ata_select_drive(uint8_t drive) {
-    uint16_t port = (drive < 2) ? ATA_PRIMARY_DRIVE_HEAD : ATA_SECONDARY_DRIVE_HEAD;
-    uint8_t drive_select = (drive & 1) ? ATA_DRIVE_SLAVE : ATA_DRIVE_MASTER;
-    
-    outb(port, drive_select);
-    ata_wait_400ns((drive < 2) ? ATA_PRIMARY_DATA : ATA_SECONDARY_DATA);
-}
-
-void ata_init(void) {
-    printf("Initializing ATA/IDE drives...\n");
-    
-    // Check for primary master
-    ata_select_drive(0);
-    if (ata_wait_ready(ATA_PRIMARY_DATA) == 0) {
-        ata_drives[0] = 1;
-        printf("Primary master drive detected\n");
-    }
-    
-    // Check for primary slave
-    ata_select_drive(1);
-    if (ata_wait_ready(ATA_PRIMARY_DATA) == 0) {
-        ata_drives[1] = 1;
-        printf("Primary slave drive detected\n");
-    }
-    
-    // Check for secondary master
-    ata_select_drive(2);
-    if (ata_wait_ready(ATA_SECONDARY_DATA) == 0) {
-        ata_drives[2] = 1;
-        printf("Secondary master drive detected\n");
-    }
-    
-    // Check for secondary slave
-    ata_select_drive(3);
-    if (ata_wait_ready(ATA_SECONDARY_DATA) == 0) {
-        ata_drives[3] = 1;
-        printf("Secondary slave drive detected\n");
-    }
-    
-    printf("ATA initialization complete\n");
-}
-
-void ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t sectors, uint16_t *buffer) {
-    if (drive >= 4 || !ata_drives[drive]) {
-        printf("Invalid drive %d\n", drive);
-        return;
-    }
-    
-    uint16_t port_base = (drive < 2) ? ATA_PRIMARY_DATA : ATA_SECONDARY_DATA;
-    uint8_t drive_select = ((drive & 1) ? ATA_DRIVE_SLAVE : ATA_DRIVE_MASTER) | 0x40 | ((lba >> 24) & 0x0F);
-    
-    // Select drive and set LBA mode
-    ata_select_drive(drive);
-    
-    if (ata_wait_ready(port_base) != 0) {
-        printf("Drive %d not ready\n", drive);
-        return;
-    }
-    
-    // Send read command
-    outb(port_base + 6, drive_select);  // Drive/head register
-    outb(port_base + 2, sectors);       // Sector count
-    outb(port_base + 3, lba & 0xFF);    // LBA low
-    outb(port_base + 4, (lba >> 8) & 0xFF);   // LBA mid
-    outb(port_base + 5, (lba >> 16) & 0xFF);  // LBA high
-    outb(port_base + 7, ATA_CMD_READ_SECTORS); // Command
-    
-    // Read sectors
-    for (int i = 0; i < sectors; i++) {
-        if (ata_wait_drq(port_base) != 0) {
-            printf("Error reading sector %d\n", i);
-            return;
-        }
-        
-        // Read 256 words (512 bytes)
-        for (int j = 0; j < 256; j++) {
-            buffer[i * 256 + j] = inw(port_base);
-        }
-    }
-}
-
-void ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t sectors, uint16_t *buffer) {
-    if (drive >= 4 || !ata_drives[drive]) {
-        printf("Invalid drive %d\n", drive);
-        return;
-    }
-    
-    uint16_t port_base = (drive < 2) ? ATA_PRIMARY_DATA : ATA_SECONDARY_DATA;
-    uint8_t drive_select = ((drive & 1) ? ATA_DRIVE_SLAVE : ATA_DRIVE_MASTER) | 0x40 | ((lba >> 24) & 0x0F);
-    
-    // Select drive and set LBA mode
-    ata_select_drive(drive);
-    
-    if (ata_wait_ready(port_base) != 0) {
-        printf("Drive %d not ready\n", drive);
-        return;
-    }
-    
-    // Send write command
-    outb(port_base + 6, drive_select);  // Drive/head register
-    outb(port_base + 2, sectors);       // Sector count
-    outb(port_base + 3, lba & 0xFF);    // LBA low
-    outb(port_base + 4, (lba >> 8) & 0xFF);   // LBA mid
-    outb(port_base + 5, (lba >> 16) & 0xFF);  // LBA high
-    outb(port_base + 7, ATA_CMD_WRITE_SECTORS); // Command
-    
-    // Write sectors
-    for (int i = 0; i < sectors; i++) {
-        if (ata_wait_drq(port_base) != 0) {
-            printf("Error writing sector %d\n", i);
-            return;
-        }
-        
-        // Write 256 words (512 bytes)
-        for (int j = 0; j < 256; j++) {
-            outw(port_base, buffer[i * 256 + j]);
-        }
-    }
-    
-    // Flush cache
-    outb(port_base + 7, ATA_CMD_FLUSH_CACHE);
-    ata_wait_ready(port_base);
-}
-
-void ata_identify(uint8_t drive) {
-    if (drive >= 4 || !ata_drives[drive]) {
-        printf("Invalid drive %d\n", drive);
-        return;
-    }
-    
-    uint16_t port_base = (drive < 2) ? ATA_PRIMARY_DATA : ATA_SECONDARY_DATA;
-    uint16_t identify_data[256];
-    
+static bool ata_identify_drive(void) {
     // Select drive
-    ata_select_drive(drive);
+    outb(ata_state.io_base + ATA_REG_HDDEVSEL, ata_state.is_slave ? 0xB0 : 0xA0);
     
-    if (ata_wait_ready(port_base) != 0) {
-        printf("Drive %d not ready\n", drive);
-        return;
+    // Wait for drive to be ready
+    ata_wait_bsy();
+
+    // Send IDENTIFY command
+    outb(ata_state.io_base + ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
+
+    // Check if drive exists
+    uint8_t status = inb(ata_state.io_base + ATA_REG_STATUS);
+    if (status == 0) {
+        return false;
     }
-    
-    // Send identify command
-    outb(port_base + 7, ATA_CMD_IDENTIFY);
-    
-    if (ata_wait_drq(port_base) != 0) {
-        printf("Error identifying drive %d\n", drive);
-        return;
-    }
-    
+
+    // Wait for data
+    ata_wait_bsy();
+    ata_wait_drq();
+
     // Read identify data
     for (int i = 0; i < 256; i++) {
-        identify_data[i] = inw(port_base);
+        ((uint16_t*)&ata_state.identify)[i] = inw(ata_state.io_base + ATA_REG_DATA);
     }
-    
-    // Parse identify data
-    char model[41];
-    char serial[21];
-    
-    // Extract model name (words 27-46)
-    for (int i = 0; i < 20; i++) {
-        uint16_t word = identify_data[27 + i];
-        model[i * 2] = (word >> 8) & 0xFF;
-        model[i * 2 + 1] = word & 0xFF;
-    }
-    model[40] = '\0';
-    
-    // Extract serial number (words 10-19)
-    for (int i = 0; i < 10; i++) {
-        uint16_t word = identify_data[10 + i];
-        serial[i * 2] = (word >> 8) & 0xFF;
-        serial[i * 2 + 1] = word & 0xFF;
-    }
-    serial[20] = '\0';
-    
-    // Get capacity
-    uint32_t sectors = ((uint32_t)identify_data[61] << 16) | identify_data[60];
-    uint32_t capacity_mb = (sectors * 512) / (1024 * 1024);
-    
-    printf("Drive %d Information:\n", drive);
-    printf("  Model: %s\n", model);
-    printf("  Serial: %s\n", serial);
-    printf("  Capacity: %d MB (%d sectors)\n", capacity_mb, sectors);
-    printf("  Features: ");
-    
-    if (identify_data[49] & 0x0200) {
-        printf("LBA ");
-    }
-    if (identify_data[83] & 0x0400) {
-        printf("LBA48 ");
-    }
-    if (identify_data[49] & 0x0100) {
-        printf("DMA ");
-    }
-    
-    printf("\n");
+
+    return true;
 }
 
-// Helper function to check if drive exists
-uint8_t ata_drive_exists(uint8_t drive) {
-    return (drive < 4) ? ata_drives[drive] : 0;
+bool ata_init(bool is_slave) {
+    if (ata_state.initialized) {
+        return true;
+    }
+
+    ata_state.io_base = ATA_PRIMARY_IO;
+    ata_state.control_base = ATA_PRIMARY_IO + 0x206;
+    ata_state.is_slave = is_slave;
+
+    // Software reset
+    outb(ata_state.control_base, 0x04);
+    outb(ata_state.control_base, 0x00);
+
+    // Wait for drive to be ready
+    ata_wait_bsy();
+
+    // Identify drive
+    if (!ata_identify_drive()) {
+        return false;
+    }
+
+    ata_state.initialized = true;
+    return true;
 }
 
-// Get drive capacity in sectors
-uint32_t ata_get_drive_size(uint8_t drive) {
-    if (drive >= 4 || !ata_drives[drive]) {
+bool ata_read_sectors(uint32_t lba, uint8_t sector_count, void* buffer) {
+    if (!ata_state.initialized || !buffer || sector_count == 0) {
+        return false;
+    }
+
+    // Select drive and set LBA mode
+    outb(ata_state.io_base + ATA_REG_HDDEVSEL, 
+         (ata_state.is_slave ? 0xF0 : 0xE0) | ((lba >> 24) & 0x0F));
+
+    // Set sector count and LBA registers
+    outb(ata_state.io_base + ATA_REG_SECCOUNT0, sector_count);
+    outb(ata_state.io_base + ATA_REG_LBA0, lba & 0xFF);
+    outb(ata_state.io_base + ATA_REG_LBA1, (lba >> 8) & 0xFF);
+    outb(ata_state.io_base + ATA_REG_LBA2, (lba >> 16) & 0xFF);
+
+    // Send read command
+    outb(ata_state.io_base + ATA_REG_COMMAND, ATA_CMD_READ_PIO);
+
+    uint16_t* buf = (uint16_t*)buffer;
+    for (uint8_t i = 0; i < sector_count; i++) {
+        // Wait for data
+        ata_wait_bsy();
+        ata_wait_drq();
+
+        // Read sector data
+        for (int j = 0; j < 256; j++) {
+            buf[j] = inw(ata_state.io_base + ATA_REG_DATA);
+        }
+        buf += 256;
+    }
+
+    return true;
+}
+
+bool ata_write_sectors(uint32_t lba, uint8_t sector_count, const void* buffer) {
+    if (!ata_state.initialized || !buffer || sector_count == 0) {
+        return false;
+    }
+
+    // Select drive and set LBA mode
+    outb(ata_state.io_base + ATA_REG_HDDEVSEL, 
+         (ata_state.is_slave ? 0xF0 : 0xE0) | ((lba >> 24) & 0x0F));
+
+    // Set sector count and LBA registers
+    outb(ata_state.io_base + ATA_REG_SECCOUNT0, sector_count);
+    outb(ata_state.io_base + ATA_REG_LBA0, lba & 0xFF);
+    outb(ata_state.io_base + ATA_REG_LBA1, (lba >> 8) & 0xFF);
+    outb(ata_state.io_base + ATA_REG_LBA2, (lba >> 16) & 0xFF);
+
+    // Send write command
+    outb(ata_state.io_base + ATA_REG_COMMAND, ATA_CMD_WRITE_PIO);
+
+    const uint16_t* buf = (const uint16_t*)buffer;
+    for (uint8_t i = 0; i < sector_count; i++) {
+        // Wait for drive to be ready
+        ata_wait_bsy();
+        ata_wait_drq();
+
+        // Write sector data
+        for (int j = 0; j < 256; j++) {
+            outw(ata_state.io_base + ATA_REG_DATA, buf[j]);
+        }
+        buf += 256;
+    }
+
+    return true;
+}
+
+const char* ata_get_model(void) {
+    if (!ata_state.initialized) {
+        return NULL;
+    }
+    return ata_state.identify.model;
+}
+
+const char* ata_get_serial(void) {
+    if (!ata_state.initialized) {
+        return NULL;
+    }
+    return ata_state.identify.serial;
+}
+
+uint64_t ata_get_size(void) {
+    if (!ata_state.initialized) {
         return 0;
     }
-    
-    uint16_t port_base = (drive < 2) ? ATA_PRIMARY_DATA : ATA_SECONDARY_DATA;
-    uint16_t identify_data[256];
-    
-    ata_select_drive(drive);
-    
-    if (ata_wait_ready(port_base) != 0) {
-        return 0;
+
+    if (ata_state.identify.capabilities & (1 << 9)) {
+        // LBA48 supported
+        return ((uint64_t)ata_state.identify.sectors_48[3] << 48) |
+               ((uint64_t)ata_state.identify.sectors_48[2] << 32) |
+               ((uint64_t)ata_state.identify.sectors_48[1] << 16) |
+               ata_state.identify.sectors_48[0];
+    } else {
+        // LBA28
+        return ((uint32_t)ata_state.identify.sectors_28[1] << 16) |
+               ata_state.identify.sectors_28[0];
     }
-    
-    outb(port_base + 7, ATA_CMD_IDENTIFY);
-    
-    if (ata_wait_drq(port_base) != 0) {
-        return 0;
-    }
-    
-    for (int i = 0; i < 256; i++) {
-        identify_data[i] = inw(port_base);
-    }
-    
-    return ((uint32_t)identify_data[61] << 16) | identify_data[60];
+}
+
+bool ata_is_initialized(void) {
+    return ata_state.initialized;
 }
