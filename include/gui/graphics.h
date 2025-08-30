@@ -77,4 +77,39 @@ void graphics_hide_cursor(void);
 void graphics_set_cursor_pos(int x, int y);
 void graphics_set_cursor_shape(uint8_t *cursor_data);
 
+// Advanced Text Rendering
+void graphics_draw_string_centered(int x, int y, int width, const char* str, uint8_t color, uint8_t bg_color);
+
+// Icon Drawing
+void graphics_draw_folder_icon(int x, int y, int size);
+void graphics_draw_app_icon(int x, int y, int size, const char* app_name);
+void graphics_draw_file_icon(int x, int y, int size);
+void graphics_draw_system_icon(int x, int y, const char* icon_name, uint8_t color);
+
+// Effects
+void graphics_draw_shadow(int x, int y, int width, int height);
+void graphics_draw_glow(int x, int y, int width, int height, uint8_t color);
+void graphics_apply_transparency(int x, int y, int width, int height, float alpha);
+
+// Color Utilities
+uint8_t graphics_rgb_to_color(uint8_t r, uint8_t g, uint8_t b);
+void graphics_color_to_rgb(uint8_t color, uint8_t* r, uint8_t* g, uint8_t* b);
+uint8_t graphics_darken_color(uint8_t color, float factor);
+uint8_t graphics_lighten_color(uint8_t color, float factor);
+
+// Animation Support
+typedef struct {
+    int start_value;
+    int end_value;
+    int current_value;
+    uint32_t start_time;
+    uint32_t duration;
+    uint8_t active;
+} graphics_animation_t;
+
+void graphics_animation_start(graphics_animation_t* anim, int start, int end, uint32_t duration);
+void graphics_animation_update(graphics_animation_t* anim);
+uint8_t graphics_animation_finished(graphics_animation_t* anim);
+
 #endif
+
