@@ -15,6 +15,7 @@
 #include "drivers/ata.h"
 #include "gui/graphics.h"
 #include "gui/window.h"
+#include "gui/input.h"
 #include "fs/fat32.h"
 #include "libc/stdio.h"
 #include "libc/string.h"
@@ -120,6 +121,9 @@ void kernel_main(uint32_t magic, struct multiboot_info *multiboot_info) {
         kernel_panic("Failed to initialize graphics system");
     }
     
+    // Initialize Input System
+    maya_input_init();
+    
     // Enable interrupts
     system_state.interrupts_enabled = true;
     sti();
@@ -128,7 +132,15 @@ void kernel_main(uint32_t magic, struct multiboot_info *multiboot_info) {
     printf("System ready. Type 'help' for available commands.\n\n");
     
     // Enter command loop
-    command_loop();
+    while(1) {
+        if (maya_input_has_events()) {
+            maya_input_event_t evt = maya_input_get_event();
+            if (evt.type == INPUT_KEY_PRESS) {
+                extern void desktop_handle_start_menu_input(char);
+                desktop_handle_start_menu_input(evt.data.key.ascii);
+            }
+        }
+    }
 }
 
 void kernel_panic(const char *message) {

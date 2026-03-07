@@ -12,16 +12,23 @@ typedef enum {
     PROCESS_STATE_TERMINATED
 } process_state_t;
 
-struct process {
+typedef struct process {
     uint32_t pid;
     process_state_t state;
     uint32_t esp;
     uint32_t ebp;
     uint32_t eip;
     uint32_t page_directory;
+    
+    // Scheduling fields (moved from scheduler)
+    uint8_t priority;
+    uint32_t quantum_remaining;
+    uint32_t total_runtime;
+    uint32_t last_run;
+    
     struct process *next;
     char name[256];
-} __attribute__((packed));
+} __attribute__((packed)) process_t;
 
 // Process management
 void process_init(void);

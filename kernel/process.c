@@ -46,8 +46,12 @@ process_t* process_create(const char* name, process_entry_t entry) {
     memset(process, 0, sizeof(process_t));
     strncpy(process->name, name, PROCESS_NAME_MAX - 1);
     process->name[PROCESS_NAME_MAX - 1] = '\0';
-    process->id = pm.process_count++;
-    process->state = PROCESS_READY;
+    process->pid = pm.process_count++;
+    process->state = PROCESS_STATE_READY;
+    process->priority = 1; // Default priority
+    process->quantum_remaining = 10; // Default quantum
+    process->total_runtime = 0;
+    process->last_run = 0;
     process->entry = entry;
 
     // Allocate stack
@@ -99,7 +103,7 @@ void process_destroy(process_t* process) {
             // Shift remaining processes
             for (uint32_t j = i; j < pm.process_count - 1; j++) {
                 pm.processes[j] = pm.processes[j + 1];
-                pm.processes[j]->id = j;
+                pm.processes[j]->pid = j;
             }
             pm.process_count--;
             break;
@@ -127,7 +131,7 @@ void process_schedule(void) {
     if (!pm.current_process) {
         pm.current_process = pm.processes[0];
     } else {
-        uint32_t next_id = (pm.current_process->id + 1) % pm.process_count;
+        uint32_t next_id = (pm.current_process->pid + 1) % pm.process_count;
         pm.current_process = pm.processes[next_id];
     }
 

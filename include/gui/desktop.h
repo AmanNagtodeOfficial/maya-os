@@ -68,10 +68,16 @@ typedef struct {
 	uint8_t visible;
 } notification_t;
 
+typedef enum {
+    THEME_WINDOWS_DARK,
+    THEME_WINDOWS_LIGHT,
+    THEME_AUBERGINE_DARK
+} desktop_theme_t;
+
 // Main Desktop Structure (merged from desktop_t and maya_desktop_t)
 typedef struct {
-	// Desktop icons
-	desktop_icon_t icons[MAX_DESKTOP_ICONS];
+    // Desktop icons
+    desktop_icon_t icons[MAX_DESKTOP_ICONS];
 	int icon_count;
 
 	// Applications
@@ -87,7 +93,15 @@ typedef struct {
 	uint8_t show_launcher;
 	uint8_t show_taskbar;
 	uint8_t show_dash; // From maya_desktop_t
+	uint8_t show_start_menu; // Windows Start Menu overlay
+	char start_menu_search[64];
+	int start_menu_search_len;
+	
 	uint8_t show_system_menu; // From maya_desktop_t
+	uint8_t show_network_flyout;
+	uint8_t show_volume_flyout;
+	uint8_t show_battery_flyout;
+	desktop_theme_t theme; // Current color theme
 
 	// Mouse simulation (From maya_desktop_t, consider if needed)
 	int mouse_x;
@@ -117,7 +131,16 @@ void desktop_update(void);
 // Component Functions (renamed from maya_*)
 void desktop_draw_wallpaper(void);
 void desktop_draw_taskbar(void);
-void desktop_draw_launcher(void);
+void desktop_draw_launcher(void); // Legacy Ubuntu Dock
+void desktop_draw_start_menu(void); // Windows Start Menu
+void desktop_toggle_start_menu(void);
+void desktop_handle_start_menu_input(char ascii); // Handle typing inside start menu search
+void desktop_draw_network_flyout(void);
+void desktop_toggle_network_flyout(void);
+void desktop_draw_volume_flyout(void);
+void desktop_toggle_volume_flyout(void);
+void desktop_draw_battery_flyout(void);
+void desktop_toggle_battery_flyout(void);
 void desktop_draw_dash(void);
 void desktop_draw_notifications(void);
 void desktop_draw_desktop_icons(void);

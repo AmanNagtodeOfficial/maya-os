@@ -25,6 +25,22 @@
 #define COLOR_YELLOW 14
 #define COLOR_WHITE 15
 
+// Modern UI Color Palette (Windows 11 Fluent Design theme)
+#define WIN_TASKBAR_BG      0x1A1C1E
+#define WIN_START_BTN_BG    0x202020
+#define WIN_BLUE_ACCENT     0x0078D4
+#define WIN_RED_CLOSE       0xE81123
+#define WIN_BORDER_COLOR    0x333333
+
+#define MAYA_LAUNCHER_BG    WIN_TASKBAR_BG
+#define MAYA_SELECTED_BG    0x3D3D3D
+#define MAYA_BORDER_COLOR   WIN_BORDER_COLOR
+#define MAYA_TEXT_COLOR     0xFFFFFF
+
+// Window Bloom Gradient Top/Bottom colors
+#define DESKTOP_BG_TOP      0x03213B
+#define DESKTOP_BG_BOTTOM   0x0A5C96
+
 // Graphics initialization and basic drawing
 void graphics_init(void);
 void graphics_set_mode(uint8_t mode);

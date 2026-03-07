@@ -65,5 +65,7 @@ typedef struct {
             key_event_t keyboard_get_key(void);
             uint8_t keyboard_get_scancode(void);
 
+typedef void (*keyboard_callback_t)(char c);
+void keyboard_set_callback(keyboard_callback_t callback);
+
             #endif
-            

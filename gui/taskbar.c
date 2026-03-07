@@ -8,10 +8,10 @@ static taskbar_t taskbar;
 
 void taskbar_init(void) {
     taskbar.x = 0;
-        taskbar.y = 0;
-            taskbar.width = SCREEN_WIDTH;
-                taskbar.height = TASKBAR_HEIGHT;
-                    taskbar.visible = 1;
+    taskbar.height = TASKBAR_HEIGHT;
+    taskbar.y = SCREEN_HEIGHT - taskbar.height;
+    taskbar.width = SCREEN_WIDTH;
+    taskbar.visible = 1;
 
                         // Initialize system status
                             taskbar.status.battery_level = 85;
@@ -21,58 +21,87 @@ void taskbar_init(void) {
                                         taskbar_update_time();
                                         }
 
-                                        void taskbar_render(void) {
-                                            if (!taskbar.visible) return;
+void taskbar_render(void) {
+    if (!taskbar.visible) return;
 
-                                                // Draw taskbar background (Ubuntu dark theme)
-                                                    graphics_fill_rect(taskbar.x, taskbar.y, taskbar.width, taskbar.height,
-                                                                       UBUNTU_DARK_GREY);
+    extern uint8_t maya_input_is_tablet_mode(void);
+    uint8_t is_touch = maya_input_is_tablet_mode();
+    int render_height = is_touch ? (taskbar.height + 12) : taskbar.height; // Larger size for fingers
+    int render_y = SCREEN_HEIGHT - render_height;
 
-                                                        // Draw top border
-                                                            graphics_draw_line(0, 0, SCREEN_WIDTH, 0, UBUNTU_BORDER_COLOR);
+    // Draw taskbar background (Windows dark theme)
+    graphics_fill_rect(taskbar.x, render_y, taskbar.width, render_height, WIN_TASKBAR_BG);
 
-                                                                // Draw Ubuntu logo/activities button
-                                                                    graphics_fill_circle(12, 14, 8, UBUNTU_ORANGE);
-                                                                        graphics_draw_string(30, 8, "Activities", WHITE);
+    // Draw top border
+    graphics_draw_line(0, render_y, SCREEN_WIDTH, render_y, WIN_BORDER_COLOR);
 
-                                                                            // Draw system tray (right side)
-                                                                                int tray_x = SCREEN_WIDTH - SYSTEM_TRAY_WIDTH;
+    // Centered App/Start Area
+    int start_x = (SCREEN_WIDTH / 2) - 16;
+    
+    // Draw Windows Start button
+    graphics_fill_rect(start_x, taskbar.y + 6, 16, 16, WIN_BLUE_ACCENT);
 
-                                                                                    // Draw system indicators
-                                                                                        taskbar_draw_indicators(tray_x);
+    // Draw open window apps to the right of the start button
+    extern window_t* window_get_by_index(int index);
+    extern uint32_t window_get_count(void);
+    extern window_t* window_get_focused(void);
+    
+    int app_x = start_x + 32;
+    uint32_t w_count = window_get_count();
+    
+    for (uint32_t i = 0; i < w_count; i++) {
+        window_t* w = window_get_by_index(i);
+        if (w) {
+            uint32_t bg_color = (w == window_get_focused()) ? 0x444444 : 0x222222;
+            graphics_fill_rect(app_x, taskbar.y + 4, 30, 20, bg_color);
+            // First letter of window as icon
+            char label[2] = {w->title[0], '\0'};
+            graphics_draw_text(label, app_x + 10, taskbar.y + 8, 0xFFFFFF);
+            
+            // Active window underline indicator
+            if (w == window_get_focused()) {
+                graphics_fill_rect(app_x + 5, taskbar.y + 24, 20, 2, WIN_BLUE_ACCENT);
+            }
+            
+            app_x += 35;
+        }
+    }
 
-                                                                                            // Draw time and date
-                                                                                                taskbar_draw_time(tray_x + 150);
-                                                                                                }
+    // Draw system tray (right side)
+    int tray_x = SCREEN_WIDTH - SYSTEM_TRAY_WIDTH + 40;
+    taskbar_draw_indicators(tray_x);
+    taskbar_draw_time(tray_x + 150);
+}
 
-                                                                                                static void taskbar_draw_indicators(int x) {
-                                                                                                    // WiFi indicator
-                                                                                                        for (int i = 0; i < taskbar.status.wifi_strength; i++) {
-                                                                                                                graphics_fill_rect(x + i * 3, 20 - i * 2, 2, i * 2 + 4, WHITE);
-                                                                                                                    }
-                                                                                                                        x += 15;
+static void taskbar_draw_indicators(int x) {
+    int y = taskbar.y + 8;
+    // WiFi indicator
+    for (int i = 0; i < taskbar.status.wifi_strength; i++) {
+        graphics_fill_rect(x + i * 3, y + 12 - i * 2, 2, i * 2 + 4, WHITE);
+    }
+    x += 15;
 
-                                                                                                                            // Battery indicator
-                                                                                                                                graphics_draw_rect(x, 8, 20, 12, WHITE);
-                                                                                                                                    graphics_fill_rect(x + 20, 11, 2, 6, WHITE);
+    // Battery indicator
+    graphics_draw_rect(x, y, 20, 12, WHITE);
+    graphics_fill_rect(x + 20, y + 3, 2, 6, WHITE);
 
-                                                                                                                                        // Battery fill based on level
-                                                                                                                                            int fill_width = (taskbar.status.battery_level * 18) / 100;
-                                                                                                                                                graphics_fill_rect(x + 1, 9, fill_width, 10,
-                                                                                                                                                                   taskbar.status.battery_level > 20 ? GREEN : RED);
-                                                                                                                                                                       x += 30;
+    // Battery fill based on level
+    int fill_width = (taskbar.status.battery_level * 18) / 100;
+    graphics_fill_rect(x + 1, y + 1, fill_width, 10,
+                       taskbar.status.battery_level > 20 ? GREEN : RED);
+    x += 30;
 
-                                                                                                                                                                           // Volume indicator
-                                                                                                                                                                               graphics_draw_string(x, 8, "â™ª", WHITE);
-                                                                                                                                                                                   x += 15;
+    // Volume indicator
+    graphics_draw_string(x, y, "v", WHITE);
+    x += 15;
 
-                                                                                                                                                                                       // User menu indicator
-                                                                                                                                                                                           graphics_draw_string(x, 8, "â–¼", WHITE);
-                                                                                                                                                                                           }
+    // User menu indicator
+    graphics_draw_string(x, y, "<", WHITE);
+}
 
-                                                                                                                                                                                           static void taskbar_draw_time(int x) {
-                                                                                                                                                                                               graphics_draw_string(x, 8, taskbar.status.time_str, WHITE);
-                                                                                                                                                                                               }
+static void taskbar_draw_time(int x) {
+    graphics_draw_string(x, taskbar.y + 8, taskbar.status.time_str, WHITE);
+}
 
                                                                                                                                                                                                void taskbar_update_time(void) {
                                                                                                                                                                                                    uint32_t ticks = timer_get_tick();
@@ -85,19 +114,40 @@ void taskbar_init(void) {
                                                                                                                                                                                                                                 "%02d:%02d", hours, minutes);
                                                                                                                                                                                                                                 }
 
-                                                                                                                                                                                                                                void taskbar_handle_click(int x, int y) {
-                                                                                                                                                                                                                                    if (y > TASKBAR_HEIGHT) return;
+void taskbar_handle_click(int x, int y) {
+    if (!taskbar.visible || y < taskbar.y) return;
 
-                                                                                                                                                                                                                                        // Activities button
-                                                                                                                                                                                                                                            if (x >= 0 && x <= 80) {
-                                                                                                                                                                                                                                                    dash_show(); // Show application launcher
-                                                                                                                                                                                                                                                            return;
-                                                                                                                                                                                                                                                                }
+    // Check Start Button Click (Centered)
+    int start_x = (SCREEN_WIDTH / 2) - 16;
+    if (x >= start_x && x <= start_x + 32) {
+        extern void desktop_toggle_start_menu(void);
+        desktop_toggle_start_menu();
+        return;
+    }
 
-                                                                                                                                                                                                                                                                    // System tray area
-                                                                                                                                                                                                                                                                        int tray_x = SCREEN_WIDTH - SYSTEM_TRAY_WIDTH;
-                                                                                                                                                                                                                                                                            if (x >= tray_x) {
-                                                                                                                                                                                                                                                                                    // Handle system menu clicks
-                                                                                                                                                                                                                                                                                        taskbar_show_system_menu();
-                                                                                                                                                                                                                                                                                        }
-                                                                                                                                                                                                                                                                                        }
+    // Check System Tray Clicks
+    int tray_x = SCREEN_WIDTH - SYSTEM_TRAY_WIDTH + 40;
+    
+    // Wi-Fi (approx width 15)
+    if (x >= tray_x && x <= tray_x + 20) {
+        extern void desktop_toggle_network_flyout(void);
+        desktop_toggle_network_flyout();
+        return;
+    }
+    tray_x += 15;
+
+    // Battery (approx width 30)
+    if (x >= tray_x && x <= tray_x + 30) {
+        extern void desktop_toggle_battery_flyout(void);
+        desktop_toggle_battery_flyout();
+        return;
+    }
+    tray_x += 30;
+
+    // Volume (approx width 15)
+    if (x >= tray_x && x <= tray_x + 20) {
+        extern void desktop_toggle_volume_flyout(void);
+        desktop_toggle_volume_flyout();
+        return;
+    }
+}

@@ -2,8 +2,8 @@
 #define MAYA_APPS_H
 
 #include <stdint.h> // Include for standard integer types
-#include "include/gui/window.h"
-#include "include/gui/input.h" // Include for maya_input_event_t
+#include "gui/window.h"
+#include "gui/input.h" // Include for maya_input_event_t
 
 // Application Categories
 #define CATEGORY_ACCESSORIES "Accessories"
@@ -76,6 +76,27 @@ void maya_calculator_handle_input(maya_app_window_t* app_window, maya_input_even
 void maya_settings_init(maya_app_window_t* app_window);
 void maya_settings_render(maya_app_window_t* app_window);
 void maya_settings_handle_input(maya_app_window_t* app_window, maya_input_event_t* event);
+
+// Phase 2 Applications
+void notepad_init(void);
+void notepad_draw_content(void);
+void notepad_handle_input(uint32_t key);
+void notepad_draw(void);
+
+void control_panel_init(void);
+void control_panel_draw_content(void);
+void control_panel_handle_input(uint32_t key);
+void control_panel_draw(void);
+
+void time_applet_init(void);
+void time_applet_draw_content(void);
+void time_applet_handle_input(uint32_t key);
+void time_applet_draw(void);
+
+void virtual_keyboard_init(void);
+void virtual_keyboard_draw_content(void);
+void virtual_keyboard_handle_mouse(int x, int y, uint8_t buttons);
+void virtual_keyboard_draw(void);
 
 // Maya Application Data Structures
 typedef struct {

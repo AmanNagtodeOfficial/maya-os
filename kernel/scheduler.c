@@ -13,37 +13,27 @@
 #define MAX_TASKS 256
 #define SCHEDULER_QUANTUM 10 // milliseconds
 
-typedef struct task {
-    process_t* process;
-    uint32_t quantum_remaining;
-    uint32_t total_runtime;
-    uint32_t last_run;
-    uint8_t priority;
-    bool running;
-    struct task* next;
-} task_t;
-
 static struct {
-    task_t* tasks[MAX_TASKS];
-    task_t* current_task;
-    task_t* idle_task;
+    process_t* tasks[MAX_TASKS];
+    process_t* current_process;
+    process_t* idle_process;
     uint32_t task_count;
     uint32_t total_switches;
     bool initialized;
 } scheduler_state;
 
 static void scheduler_timer_callback(uint32_t tick_count) {
-    if (!scheduler_state.initialized || !scheduler_state.current_task) {
+    if (!scheduler_state.initialized || !scheduler_state.current_process) {
         return;
     }
 
     // Decrement quantum
-    if (scheduler_state.current_task->quantum_remaining > 0) {
-        scheduler_state.current_task->quantum_remaining--;
+    if (scheduler_state.current_process->quantum_remaining > 0) {
+        scheduler_state.current_process->quantum_remaining--;
     }
 
     // If quantum expired, trigger context switch
-    if (scheduler_state.current_task->quantum_remaining == 0) {
+    if (scheduler_state.current_process->quantum_remaining == 0) {
         scheduler_switch_task();
     }
 }
@@ -63,24 +53,15 @@ bool scheduler_init(void) {
     memset(&scheduler_state, 0, sizeof(scheduler_state));
 
     // Create idle task
-    process_t* idle_process = process_create("idle", scheduler_idle_task);
-    if (!idle_process) {
+    process_t* idle = process_create("idle", (void*)scheduler_idle_task);
+    if (!idle) {
         return false;
     }
 
-    scheduler_state.idle_task = kmalloc(sizeof(task_t));
-    if (!scheduler_state.idle_task) {
-        process_destroy(idle_process);
-        return false;
-    }
-
-    scheduler_state.idle_task->process = idle_process;
-    scheduler_state.idle_task->quantum_remaining = SCHEDULER_QUANTUM;
-    scheduler_state.idle_task->total_runtime = 0;
-    scheduler_state.idle_task->last_run = 0;
-    scheduler_state.idle_task->priority = 0;
-    scheduler_state.idle_task->running = false;
-    scheduler_state.idle_task->next = NULL;
+    scheduler_state.idle_process = idle;
+    scheduler_state.idle_process->quantum_remaining = SCHEDULER_QUANTUM;
+    scheduler_state.idle_process->priority = 0;
+    scheduler_state.idle_process->state = PROCESS_STATE_READY;
 
     // Register timer callback
     timer_set_callback(scheduler_timer_callback);
@@ -95,27 +76,19 @@ bool scheduler_add_task(process_t* process, uint8_t priority) {
         return false;
     }
 
-    // Create new task
-    task_t* task = kmalloc(sizeof(task_t));
-    if (!task) {
-        return false;
-    }
-
-    task->process = process;
-    task->quantum_remaining = SCHEDULER_QUANTUM;
-    task->total_runtime = 0;
-    task->last_run = timer_get_ticks();
-    task->priority = priority;
-    task->running = false;
-    task->next = NULL;
+    process->quantum_remaining = SCHEDULER_QUANTUM;
+    process->total_runtime = 0;
+    process->last_run = timer_get_ticks();
+    process->priority = priority;
+    process->state = PROCESS_STATE_READY;
 
     // Add to task list
-    scheduler_state.tasks[scheduler_state.task_count++] = task;
+    scheduler_state.tasks[scheduler_state.task_count++] = process;
 
     // Sort tasks by priority
     for (uint32_t i = scheduler_state.task_count - 1; i > 0; i--) {
         if (scheduler_state.tasks[i]->priority > scheduler_state.tasks[i-1]->priority) {
-            task_t* temp = scheduler_state.tasks[i];
+            process_t* temp = scheduler_state.tasks[i];
             scheduler_state.tasks[i] = scheduler_state.tasks[i-1];
             scheduler_state.tasks[i-1] = temp;
         }
@@ -131,10 +104,7 @@ void scheduler_remove_task(process_t* process) {
 
     // Find and remove task
     for (uint32_t i = 0; i < scheduler_state.task_count; i++) {
-        if (scheduler_state.tasks[i]->process == process) {
-            // Free task structure
-            kfree(scheduler_state.tasks[i]);
-
+        if (scheduler_state.tasks[i] == process) {
             // Shift remaining tasks
             for (uint32_t j = i; j < scheduler_state.task_count - 1; j++) {
                 scheduler_state.tasks[j] = scheduler_state.tasks[j + 1];
@@ -152,45 +122,45 @@ void scheduler_switch_task(void) {
     }
 
     // Update current task statistics
-    if (scheduler_state.current_task) {
+    if (scheduler_state.current_process) {
         uint32_t current_ticks = timer_get_ticks();
-        scheduler_state.current_task->total_runtime += 
-            current_ticks - scheduler_state.current_task->last_run;
-        scheduler_state.current_task->last_run = current_ticks;
-        scheduler_state.current_task->running = false;
+        scheduler_state.current_process->total_runtime += 
+            current_ticks - scheduler_state.current_process->last_run;
+        scheduler_state.current_process->last_run = current_ticks;
+        scheduler_state.current_process->state = PROCESS_STATE_READY;
     }
 
     // Find next task to run
-    task_t* next_task = NULL;
+    process_t* next_process = NULL;
     for (uint32_t i = 0; i < scheduler_state.task_count; i++) {
-        if (!scheduler_state.tasks[i]->running) {
-            next_task = scheduler_state.tasks[i];
+        if (scheduler_state.tasks[i]->state == PROCESS_STATE_READY) {
+            next_process = scheduler_state.tasks[i];
             break;
         }
     }
 
     // If no task found, use idle task
-    if (!next_task) {
-        next_task = scheduler_state.idle_task;
+    if (!next_process) {
+        next_process = scheduler_state.idle_process;
     }
 
     // Switch to next task
-    next_task->quantum_remaining = SCHEDULER_QUANTUM;
-    next_task->running = true;
-    next_task->last_run = timer_get_ticks();
+    next_process->quantum_remaining = SCHEDULER_QUANTUM;
+    next_process->state = PROCESS_STATE_RUNNING;
+    next_process->last_run = timer_get_ticks();
 
-    scheduler_state.current_task = next_task;
+    scheduler_state.current_process = next_process;
     scheduler_state.total_switches++;
 
     // Perform context switch
-    process_switch(next_task->process);
+    process_switch(next_process);
 }
 
 process_t* scheduler_get_current_process(void) {
-    if (!scheduler_state.initialized || !scheduler_state.current_task) {
+    if (!scheduler_state.initialized || !scheduler_state.current_process) {
         return NULL;
     }
-    return scheduler_state.current_task->process;
+    return scheduler_state.current_process;
 }
 
 uint32_t scheduler_get_task_count(void) {
