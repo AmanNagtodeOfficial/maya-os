@@ -7,7 +7,7 @@
 #include "drivers/ahci.h"
 #include "drivers/pci.h"
 #include "kernel/memory.h"
-#include "kernel/interrupt.h"
+#include "kernel/interrupts.h"
 #include "libc/string.h"
 
 #define AHCI_VENDOR_ID 0x8086  // Intel

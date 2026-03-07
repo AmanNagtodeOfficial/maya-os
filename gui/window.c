@@ -259,20 +259,29 @@ bool window_handle_mouse(int x, int y, uint8_t buttons) {
                     }
                     if (rel_x >= window->max_x && rel_x < window->max_x + window->max_w &&
                         rel_y >= window->max_y && rel_y < window->max_y + window->max_h) {
-                        // Toggle maximize (placeholder for now)
-                        return true;
-                    }
-                    if (rel_x >= window->min_x && rel_x < window->min_x + window->min_w &&
-                        rel_y >= window->min_y && rel_y < window->min_y + window->min_h) {
-                        window->visible = false;
+                        // Toggle maximize
+                        if (window->state == WINDOW_STATE_MAXIMIZED) {
+                            window->state = WINDOW_STATE_NORMAL;
+                            window->x = 50; window->y = 50;
+                            window_resize(window, 640, 480);
+                        } else {
+                            window->state = WINDOW_STATE_MAXIMIZED;
+                            window->x = 0; window->y = 0;
+                            window_resize(window, SCREEN_WIDTH, SCREEN_HEIGHT);
+                        }
                         return true;
                     }
 
                     if (!window->dragging) {
                         window_focus(window);
-                        window->dragging = true;
-                        drag_start_x = x - window->x;
-                        drag_start_y = y - window->y;
+                        // Check for resize (bottom right corner)
+                        if (rel_x > window->width - 15 && rel_y > window->height - 15) {
+                            window->resizing = true;
+                        } else {
+                            window->dragging = true;
+                            drag_start_x = rel_x;
+                            drag_start_y = rel_y;
+                        }
                     }
                 }
             }

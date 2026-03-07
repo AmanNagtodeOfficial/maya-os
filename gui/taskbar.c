@@ -75,33 +75,27 @@ void taskbar_render(void) {
 
 static void taskbar_draw_indicators(int x) {
     int y = taskbar.y + 8;
-    // WiFi indicator
-    for (int i = 0; i < taskbar.status.wifi_strength; i++) {
-        graphics_fill_rect(x + i * 3, y + 12 - i * 2, 2, i * 2 + 4, WHITE);
+    // WiFi indicator (curved bars)
+    for (int i = 0; i < 4; i++) {
+        uint32_t color = (i < taskbar.status.wifi_strength) ? 0xFFFFFF : 0x555555;
+        graphics_draw_line(x - i*2, y + 10 - i*3, x + i*2, y + 10 - i*3, color);
     }
-    x += 15;
+    x += 20;
 
-    // Battery indicator
-    graphics_draw_rect(x, y, 20, 12, WHITE);
-    graphics_fill_rect(x + 20, y + 3, 2, 6, WHITE);
+    // Battery indicator (modern outline)
+    graphics_draw_rect(x, y + 2, 22, 10, 0xFFFFFF);
+    graphics_fill_rect(x + 22, y + 5, 2, 4, 0xFFFFFF);
+    int fill = (taskbar.status.battery_level * 20) / 100;
+    graphics_fill_rect(x + 1, y + 3, fill, 8, (taskbar.status.battery_level > 20) ? 0x00FF00 : 0xFF0000);
+    x += 35;
 
-    // Battery fill based on level
-    int fill_width = (taskbar.status.battery_level * 18) / 100;
-    graphics_fill_rect(x + 1, y + 1, fill_width, 10,
-                       taskbar.status.battery_level > 20 ? GREEN : RED);
-    x += 30;
-
-    // Volume indicator
-    graphics_draw_string(x, y, "v", WHITE);
-    x += 15;
-
-    // User menu indicator
-    graphics_draw_string(x, y, "<", WHITE);
+    // Clock handled separately in taskbar_draw_time
 }
 
 static void taskbar_draw_time(int x) {
-    graphics_draw_string(x, taskbar.y + 8, taskbar.status.time_str, WHITE);
+    graphics_draw_text(taskbar.status.time_str, x, taskbar.y + 8, 0xFFFFFF);
 }
+
 
                                                                                                                                                                                                void taskbar_update_time(void) {
                                                                                                                                                                                                    uint32_t ticks = timer_get_tick();

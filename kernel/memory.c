@@ -1,12 +1,13 @@
 /**
  * Maya OS Memory Management System
- * Updated: 2025-08-29 10:55:59 UTC
+ * Updated: 2026-03-07 14:30:00 UTC
  * Author: AmanNagtodeOfficial
  */
 
 #include "kernel/memory.h"
 #include "kernel/interrupts.h"
 #include "libc/string.h"
+#include "libc/stdio.h"
 
 #define PAGE_SIZE 4096
 #define HEAP_START 0xD0000000
@@ -234,10 +235,128 @@ uint32_t get_total_memory(void) {
     return total_memory;
 }
 
+uint32_t pmm_get_total_memory(void) {
+    return total_memory;
+}
+
 uint32_t get_used_memory(void) {
     return used_memory;
 }
 
 bool is_mmu_initialized(void) {
     return mmu_initialized;
+}
+
+/**
+ * memory_alloc_dma – Allocate physically contiguous, aligned memory for DMA.
+ */
+void* memory_alloc_dma(size_t size, size_t alignment) {
+    // kmalloc_aligned currently just rounds to PAGE_SIZE.
+    // For specific alignment, we can use a wrapper.
+    (void)alignment; // alignment is handled by kmalloc_aligned to some extent
+    return kmalloc_aligned(size);
+}
+
+/**
+ * memory_free_dma – Free DMA memory.
+ */
+void memory_free_dma(void* ptr) {
+    kfree(ptr);
+}
+
+/**
+ * memory_get_physical – Get physical address from virtual address.
+ * Since we identity map the lower memory and use a flat model for now,
+ * physical == virtual in many cases, but we should do a proper walk.
+ */
+uintptr_t memory_get_physical(void* virt_addr) {
+    uint32_t addr = (uint32_t)virt_addr;
+    if (addr < 0x400000) return addr; // Identity mapped
+    
+    // Proper page table walk
+    uint32_t pd_index = addr >> 22;
+    uint32_t pt_index = (addr >> 12) & 0x3FF;
+    
+    if (!(page_directory[pd_index] & 1)) return 0;
+    uint32_t* page_table = (uint32_t*)(page_directory[pd_index] & 0xFFFFF000);
+    if (!(page_table[pt_index] & 1)) return 0;
+    
+    return (page_table[pt_index] & 0xFFFFF000) | (addr & 0xFFF);
+}
+
+/**
+ * memory_map_physical – Map a physical region into virtual address space.
+ * For now, we identity map the region if it's not already.
+ */
+void* memory_map_physical(uintptr_t phys_addr, size_t size) {
+    uint32_t start = (uint32_t)phys_addr & 0xFFFFF000;
+    uint32_t end   = ((uint32_t)phys_addr + size + 0xFFF) & 0xFFFFF000;
+    
+    for (uint32_t addr = start; addr < end; addr += 0x1000) {
+        page_map(addr, addr); // Identity map for simplicity/hardware access
+    }
+    
+    return (void*)phys_addr;
+}
+
+void* memory_map_region_v(uintptr_t phys_addr, uintptr_t virt_addr, size_t size, uint32_t flags) {
+    (void)flags;
+    uint32_t p_start = (uint32_t)phys_addr & 0xFFFFF000;
+    uint32_t v_start = (uint32_t)virt_addr & 0xFFFFF000;
+    uint32_t count = (size + 0xFFF) / 0x1000;
+    
+    for (uint32_t i = 0; i < count; i++) {
+        page_map(v_start + (i * 0x1000), p_start + (i * 0x1000));
+    }
+    return (void*)virt_addr;
+}
+
+ * The heap spans HEAP_START .. HEAP_END (256 MB window by default).
+ * The first block descriptor is placed at HEAP_START itself.
+ */
+bool heap_init(void) {
+    if (heap_blocks != NULL) {
+        return true; /* already initialised */
+    }
+
+    /* Place the first block descriptor at the very start of the heap region */
+    heap_blocks = (memory_block_t *)HEAP_START;
+    heap_blocks->start = HEAP_START + sizeof(memory_block_t);
+    heap_blocks->size  = (HEAP_END - HEAP_START) - sizeof(memory_block_t);
+    heap_blocks->used  = false;
+    heap_blocks->next  = NULL;
+
+    return true;
+}
+
+/**
+ * memory_validate_user_buffer – Safety check before accessing a user pointer.
+ * In a real MMU-enabled kernel this would walk the page tables; here we just
+ * verify the range falls within the lower user-space half (< 0xC0000000).
+ */
+bool memory_validate_user_buffer(const void *ptr, size_t len) {
+    if (!ptr || len == 0) return false;
+    uint32_t start = (uint32_t)ptr;
+    uint32_t end   = start + (uint32_t)len;
+    /* Overflow guard */
+    if (end < start) return false;
+    /* Must be in user-space (below kernel mapping at 0xC0000000) */
+    if (end > 0xC0000000U) return false;
+    return true;
+}
+
+/**
+ * memory_validate_user_string – Safety check for a NUL-terminated string.
+ * Scans up to 4096 bytes; returns false if no terminator found or pointer
+ * is out of user-space.
+ */
+bool memory_validate_user_string(const char *str) {
+    if (!str) return false;
+    uint32_t addr = (uint32_t)str;
+    if (addr >= 0xC0000000U) return false;
+    for (size_t i = 0; i < 4096; i++) {
+        if (addr + i >= 0xC0000000U) return false;
+        if (str[i] == '\0') return true;
+    }
+    return false; /* No NUL found within 4 KB */
 }

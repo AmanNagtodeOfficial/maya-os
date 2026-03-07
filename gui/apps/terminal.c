@@ -5,24 +5,36 @@
 #include "kernel/memory.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
+#include "apps/shell.h"
 
-#define TERM_ROWS 20
+#define TERM_ROWS 25
 #define TERM_COLS 80
 #define CHAR_WIDTH 8
 #define CHAR_HEIGHT 16
 
 static window_t* term_window = NULL;
-static char* term_buffer = NULL;
 static char current_command[256];
 static int cmd_pos = 0;
 static int cursor_row = 0;
-static int cursor_col = 0;
+static char term_lines[TERM_ROWS][TERM_COLS];
+static int line_count = 0;
 
 void terminal_writeln(const char* text) {
-    // Basic terminal scrolling skip for now
-    graphics_draw_text(text, term_window->x + 5, term_window->y + WINDOW_TITLE_HEIGHT + (cursor_row * CHAR_HEIGHT) + 5, 0x00FF00);
-    cursor_row++;
-    cursor_col = 0;
+    if (line_count < TERM_ROWS) {
+        strncpy(term_lines[line_count], text, TERM_COLS - 1);
+        line_count++;
+    } else {
+        // Scroll: shift lines up
+        for (int i = 0; i < TERM_ROWS - 1; i++) {
+            memcpy(term_lines[i], term_lines[i+1], TERM_COLS);
+        }
+        strncpy(term_lines[TERM_ROWS-1], text, TERM_COLS - 1);
+    }
+}
+
+static void terminal_shell_output(const char* text) {
+    // Break into lines if needed
+    terminal_writeln(text);
 }
 
 void terminal_handle_input(uint32_t key) {
@@ -30,47 +42,56 @@ void terminal_handle_input(uint32_t key) {
 
     if (key == '\n') {
         current_command[cmd_pos] = '\0';
-        terminal_writeln(current_command);
+        char prompt[300];
+        sprintf(prompt, "> %s", current_command);
+        terminal_writeln(prompt);
         
-        // Placeholder for command execution
-        if (strcmp(current_command, "help") == 0) {
-            terminal_writeln("Available commands: help, clear, exit");
-        } else if (strcmp(current_command, "clear") == 0) {
-            window_clear(term_window, 0x000000);
-            cursor_row = 0;
-            cursor_col = 0;
-        } else if (strcmp(current_command, "exit") == 0) {
-            window_hide(term_window);
-        } else {
-            terminal_writeln("Unknown command");
-        }
+        shell_execute(current_command);
         
         cmd_pos = 0;
         memset(current_command, 0, sizeof(current_command));
     } else if (key == '\b') {
         if (cmd_pos > 0) {
-            cmd_pos--;
-            current_command[cmd_pos] = '\0';
+            current_command[--cmd_pos] = '\0';
         }
-    } else if (cmd_pos < sizeof(current_command) - 1) {
+    } else if (key == '\t') { // Tab for autocomplete
+        char result[256] = {0};
+        shell_autocomplete(current_command, result);
+        if (strlen(result) > 0) {
+            strcpy(current_command, result);
+            cmd_pos = strlen(result);
+        }
+    } else if (cmd_pos < sizeof(current_command) - 1 && key < 128) {
         current_command[cmd_pos++] = (char)key;
     }
 
     // Refresh display
     window_clear(term_window, 0x000000);
-    // Redraw all lines (simplified: just current command for now)
+    for (int i = 0; i < line_count; i++) {
+        graphics_draw_text(term_lines[i], term_window->x + 5, term_window->y + WINDOW_TITLE_HEIGHT + (i * CHAR_HEIGHT) + 5, 0x00FF00);
+    }
+    
+    // Draw current prompt
     char prompt[300];
-    sprintf(prompt, "> %s", current_command);
-    graphics_draw_text(prompt, term_window->x + 5, term_window->y + WINDOW_TITLE_HEIGHT + 5, 0x00FF00);
+    sprintf(prompt, "> %s_", current_command);
+    graphics_draw_text(prompt, term_window->x + 5, term_window->y + WINDOW_TITLE_HEIGHT + (line_count * CHAR_HEIGHT) + 5, 0x00FF00);
+    
     window_refresh(term_window);
 }
 
+#include "gui/notification.h"
+
 void terminal_init(void) {
+    notification_push("Terminal", "Command Line Interface active.");
     term_window = window_create("Terminal", 100, 100, 640, 480);
     if (!term_window) return;
 
-    window_clear(term_window, 0x000000); // Black background
-    terminal_writeln("Maya OS Terminal v1.0");
+    memset(term_lines, 0, sizeof(term_lines));
+    line_count = 0;
+
+    shell_init(terminal_shell_output);
+    
+    terminal_writeln("Maya OS Terminal v1.1");
     terminal_writeln("Type 'help' for commands.");
     window_refresh(term_window);
 }
@@ -80,3 +101,4 @@ void terminal_draw(void) {
         window_render(term_window);
     }
 }
+

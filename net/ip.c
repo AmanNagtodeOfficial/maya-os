@@ -5,7 +5,7 @@
  */
 
 #include "net/ip.h"
-#include "net/ethernet.h"
+#include "net/arp.h"
 #include "kernel/memory.h"
 #include "libc/string.h"
 
@@ -127,12 +127,12 @@ bool ip_send_packet(uint32_t dest_ip, uint8_t protocol, const void* data, size_t
                         (ip_state.ip_address & ip_state.subnet_mask) ?
                         dest_ip : ip_state.gateway;
 
-    // TODO: Implement ARP to resolve MAC address
-    // For now, use broadcast
-    memset(dest_mac, 0xFF, 6);
+    // Resolve via ARP
+    arp_resolve(next_hop, dest_mac);
 
     // Send through Ethernet
     bool result = ethernet_send_frame(dest_mac, 0x0800, packet, total_length);
+
     
     kfree(packet);
     ip_state.id_counter++;

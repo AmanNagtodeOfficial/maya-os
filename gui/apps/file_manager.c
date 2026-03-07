@@ -17,27 +17,21 @@ static const char* mock_files[] = {
 void file_manager_init(void) {
     fm_window = window_create("File Manager", 150, 150, 500, 350);
     if (!fm_window) return;
-
-    window_clear(fm_window, 0xF0F0F0); // Light grey background
-
-    // Create a "Back" button
-    button_t* back_btn = button_create(10, 10, 60, 25, "Back");
-    window_add_widget(fm_window, (widget_t*)back_btn);
-
-    // Current path label
-    label_t* path_lbl = label_create(80, 15, current_path);
-    window_add_widget(fm_window, (widget_t*)path_lbl);
-
-    // List files
-    int y = 50;
-    for (int i = 0; i < 9; i++) {
-        label_t* file_lbl = label_create(20, y, mock_files[i]);
-        window_add_widget(fm_window, (widget_t*)file_lbl);
-        y += 20;
+    window_clear(fm_window, 0xF0F0F0);
+    vfs_node_t* node = vfs_root;
+    if (node) {
+        int y = 50;
+        struct vfs_dirent* entry;
+        int i = 0;
+        while ((entry = vfs_readdir(node, i++)) && i < 15) {
+            label_t* file_lbl = label_create(20, y, entry->name);
+            window_add_widget(fm_window, (widget_t*)file_lbl);
+            y += 20;
+        }
     }
-
     window_refresh(fm_window);
 }
+
 
 void file_manager_draw(void) {
     if (fm_window && fm_window->visible) {

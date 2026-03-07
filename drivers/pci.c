@@ -38,7 +38,7 @@
 #define PCI_INTERRUPT_PIN 0x3D
 
 static struct {
-    pci_device_info_t devices[PCI_MAX_BUSES * PCI_MAX_DEVICES * PCI_MAX_FUNCTIONS];
+    pci_device_t devices[PCI_MAX_BUSES * PCI_MAX_DEVICES * PCI_MAX_FUNCTIONS];
     uint32_t device_count;
     bool initialized;
 } pci_state;
@@ -71,7 +71,7 @@ static void pci_check_function(uint8_t bus, uint8_t device, uint8_t function) {
         return;
     }
 
-    pci_device_info_t* dev = &pci_state.devices[pci_state.device_count++];
+    pci_device_t* dev = &pci_state.devices[pci_state.device_count++];
     dev->bus = bus;
     dev->device = device;
     dev->function = function;
@@ -168,7 +168,7 @@ uint32_t pci_get_device_count(void) {
     return pci_state.device_count;
 }
 
-const pci_device_info_t* pci_get_device(uint32_t index) {
+const pci_device_t* pci_get_device(uint32_t index) {
     if (index >= pci_state.device_count) {
         return NULL;
     }
@@ -181,14 +181,14 @@ void pci_enable_bus_mastering(uint8_t bus, uint8_t device, uint8_t function) {
     pci_write_config(bus, device, function, PCI_COMMAND, command);
 }
 
-uint32_t pci_get_bar_address(const pci_device_info_t* dev, uint8_t bar_num) {
+uint32_t pci_get_bar_address(const pci_device_t* dev, uint8_t bar_num) {
     if (!dev || bar_num >= 6) {
         return 0;
     }
     return dev->bar[bar_num] & (dev->bar[bar_num] & 1 ? 0xFFFFFFFC : 0xFFFFFFF0);
 }
 
-uint32_t pci_get_bar_size(const pci_device_info_t* dev, uint8_t bar_num) {
+uint32_t pci_get_bar_size(const pci_device_t* dev, uint8_t bar_num) {
     if (!dev || bar_num >= 6) {
         return 0;
     }

@@ -48,7 +48,8 @@ static uint8_t mouse_read(void) {
     return inb(MOUSE_PORT);
 }
 
-static void mouse_handler(struct regs* r) {
+static void mouse_handler(struct registers* r) {
+    (void)r;
     uint8_t status = inb(MOUSE_STATUS);
     if (!(status & 0x20)) {
         return;
@@ -132,12 +133,13 @@ bool mouse_init(void) {
     mouse_write(0xF4);
     mouse_read();  // ACK
 
-    // Install mouse handler
-    irq_install_handler(12, mouse_handler);
+    // Install mouse handler on IRQ12 (0x2C = 44)
+    register_interrupt_handler(44, (isr_t)mouse_handler);
 
     mouse_initialized = true;
     return true;
 }
+
 
 void mouse_set_callback(mouse_callback_t callback) {
     if (!mouse_initialized) {

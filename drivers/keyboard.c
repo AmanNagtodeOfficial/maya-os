@@ -66,7 +66,8 @@ static char keyboard_buffer_pop(void) {
     return 0;
 }
 
-static void keyboard_handler(struct regs* r) {
+static void keyboard_handler(struct registers* r) {
+    (void)r;
     uint8_t scancode = inb(KEYBOARD_DATA_PORT);
     bool released = scancode & KEY_RELEASE_BIT;
     scancode &= ~KEY_RELEASE_BIT;
@@ -131,8 +132,8 @@ bool keyboard_init(void) {
     // Initialize state
     memset(&keyboard_state, 0, sizeof(keyboard_state));
 
-    // Install interrupt handler
-    irq_install_handler(1, keyboard_handler);
+    // Install interrupt handler on IRQ1 (0x21 = 33)
+    register_interrupt_handler(33, (isr_t)keyboard_handler);
 
     // Enable keyboard
     while ((inb(KEYBOARD_STATUS_PORT) & 2) != 0);
@@ -148,6 +149,7 @@ bool keyboard_init(void) {
     keyboard_state.initialized = true;
     return true;
 }
+
 
 void keyboard_set_callback(keyboard_callback_t callback) {
     if (!keyboard_state.initialized) {

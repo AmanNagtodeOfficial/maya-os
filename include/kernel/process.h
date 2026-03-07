@@ -12,6 +12,8 @@ typedef enum {
     PROCESS_STATE_TERMINATED
 } process_state_t;
 
+#include "fs/file.h"
+
 typedef struct process {
     uint32_t pid;
     process_state_t state;
@@ -20,11 +22,15 @@ typedef struct process {
     uint32_t eip;
     uint32_t page_directory;
     
-    // Scheduling fields (moved from scheduler)
+    // Scheduling fields
     uint8_t priority;
     uint32_t quantum_remaining;
     uint32_t total_runtime;
     uint32_t last_run;
+    
+    // Filesystem and Security
+    fd_table_t fd_table;
+    uint32_t caps;
     
     struct process *next;
     char name[256];

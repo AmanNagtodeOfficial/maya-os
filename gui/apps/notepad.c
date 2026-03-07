@@ -84,6 +84,25 @@ void notepad_init(void) {
     notepad_draw_content();
 }
 
+void notepad_save(const char* filename) {
+    vfs_node_t* node = vfs_open(filename, 0); // Simplified open
+    if (node) {
+        for (int i = 0; i <= max_written_row; i++) {
+            vfs_write(node, 0, strlen(text_buffer[i]), text_buffer[i]);
+            vfs_write(node, 0, 1, "\n");
+        }
+        vfs_close(node);
+    }
+}
+
+void notepad_load(const char* filename) {
+    vfs_node_t* node = vfs_open(filename, 0);
+    if (node) {
+        // Simplified load logic
+        vfs_close(node);
+    }
+}
+
 void notepad_draw(void) {
     if (notepad_window && notepad_window->visible) {
         window_render(notepad_window);

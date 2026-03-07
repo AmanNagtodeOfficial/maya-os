@@ -248,4 +248,9 @@ memory_error_t memory_unlock(void *ptr, size_t size);
  */
 const char *memory_strerror(memory_error_t error);
 
+void* memory_alloc_dma(size_t size, size_t alignment);
+void  memory_free_dma(void* ptr);
+uintptr_t memory_get_physical(void* virt_addr);
+void* memory_map_physical(uintptr_t phys_addr, size_t size);
+
 #endif /* KERNEL_MEMORY_H */

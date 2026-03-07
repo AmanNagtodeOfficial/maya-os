@@ -168,3 +168,44 @@ uint32_t graphics_get_width(void) {
 uint32_t graphics_get_height(void) {
     return graphics_state.height;
 }
+void graphics_fill_rect_alpha(int x, int y, int width, int height, uint32_t color, uint8_t alpha) {
+    if (!graphics_state.initialized) return;
+
+    for (int i = y; i < y + height; i++) {
+        for (int j = x; j < x + width; j++) {
+            if (j < 0 || j >= (int)graphics_state.width || i < 0 || i >= (int)graphics_state.height) continue;
+            
+            uint32_t dest = graphics_state.framebuffer[i * graphics_state.width + j];
+            
+            uint32_t rb = ((dest & 0xFF00FF) * (255 - alpha) + (color & 0xFF00FF) * alpha) >> 8;
+            uint32_t g = ((dest & 0x00FF00) * (255 - alpha) + (color & 0x00FF00) * alpha) >> 8;
+            
+            graphics_state.framebuffer[i * graphics_state.width + j] = (rb & 0xFF00FF) | (g & 0x00FF00);
+        }
+    }
+}
+
+void graphics_draw_rounded_rect(int x, int y, int width, int height, int radius, uint32_t color) {
+    // Simplified rounded rect: draw center rects and then corners
+    graphics_fill_rect(x + radius, y, width - 2 * radius, height, color);
+    graphics_fill_rect(x, y + radius, width, height - 2 * radius, color);
+    
+    // Draw 4 rounded corners (simplified dots for now)
+    // In a real implementation, we'd draw arcs
+}
+
+void graphics_blit(uint32_t* src, int x, int y, int width, int height, int src_width) {
+    if (!graphics_state.initialized || !src) return;
+
+    for (int i = 0; i < height; i++) {
+        int dest_y = y + i;
+        if (dest_y < 0 || dest_y >= (int)graphics_state.height) continue;
+        
+        for (int j = 0; j < width; j++) {
+            int dest_x = x + j;
+            if (dest_x < 0 || dest_x >= (int)graphics_state.width) continue;
+            
+            graphics_state.framebuffer[dest_y * graphics_state.width + dest_x] = src[i * src_width + j];
+        }
+    }
+}

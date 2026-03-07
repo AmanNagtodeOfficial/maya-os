@@ -197,6 +197,45 @@ bool fat32_read_file(const char* filename, void* buffer, size_t* size) {
     if (!found) {
         return false;
     }
+}
+
+struct vfs_dirent* fat32_readdir(vfs_node_t* node, uint32_t index) {
+    if (!fat32_fs.mounted || !node) return NULL;
+    
+    static struct vfs_dirent result;
+    uint32_t cluster = node->inode;
+    uint32_t count = 0;
+
+    while (cluster >= 2 && cluster < FAT32_EOC) {
+        if (!fat32_read_cluster(cluster, cluster_buffer)) break;
+        
+        fat32_dir_entry_t* entries = (fat32_dir_entry_t*)cluster_buffer;
+        int max_entries = (512 * fat32_fs.boot_sector->sectors_per_cluster) / sizeof(fat32_dir_entry_t);
+        
+        for (int i = 0; i < max_entries; i++) {
+            if (entries[i].name[0] == 0x00) return NULL;
+            if (entries[i].name[0] == 0xE5) continue;
+            if (entries[i].attributes & 0x08) continue; // Volume label
+
+            if (count == index) {
+                // Convert FAT name to normal name
+                int name_len = 0;
+                for (int j = 0; j < 8 && entries[i].name[j] != ' '; j++) result.name[name_len++] = entries[i].name[j];
+                if (entries[i].name[8] != ' ') {
+                    result.name[name_len++] = '.';
+                    for (int j = 8; j < 11 && entries[i].name[j] != ' '; j++) result.name[name_len++] = entries[i].name[j];
+                }
+                result.name[name_len] = '\0';
+                result.inode = (entries[i].first_cluster_high << 16) | entries[i].first_cluster_low;
+                return &result;
+            }
+            count++;
+        }
+        cluster = fat32_fs.fat_table[cluster];
+    }
+    return NULL;
+}
+
 
     // Read file data
     uint8_t* buf_ptr = (uint8_t*)buffer;

@@ -342,6 +342,24 @@ void tcp_handle_packet(uint32_t src_ip, const void* packet, size_t length) {
     }
 }
 
+void tcp_periodic_check(void) {
+    if (!tcp_state.initialized) return;
+
+    tcp_socket_t* socket = tcp_state.sockets;
+    uint32_t current_time = timer_get_ticks();
+
+    while (socket) {
+        if (socket->state == TCP_STATE_ESTABLISHED && socket->retries > 0) {
+            if (current_time - socket->timeout > TCP_TIMEOUT) {
+                // Retransmit last packet logic...
+                socket->retries--;
+                socket->timeout = current_time;
+            }
+        }
+        socket = socket->next;
+    }
+}
+
 bool tcp_is_initialized(void) {
     return tcp_state.initialized;
 }

@@ -9,6 +9,7 @@
 #include "kernel/timer.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
+#include "gui/notification.h"
 
 static desktop_t desktop;
 
@@ -268,10 +269,15 @@ void desktop_render(void) {
     
     // Task View overlay (drawn on top of everything)
     taskview_draw(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    // Notifications
+    notification_update();
+    notification_render();
     
     // Update screen
     graphics_update();
 }
+
 
 void desktop_add_application(const char *name, const char *command, const char *category) {
     if (desktop.app_count >= MAX_APPLICATIONS) return;
