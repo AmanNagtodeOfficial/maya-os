@@ -41,6 +41,7 @@ void desktop_init(void) {
     desktop_add_application("Control Panel",     "control_panel",  "System");
     desktop_add_application("Date & Time",       "time_applet",    "System");
     desktop_add_application("Settings",          "settings",       "System");
+    desktop_add_application("Hardware Manager",  "hardware_manager","System");
 
     // Initialize the windows 11 settings panel
     settings_init();
@@ -315,6 +316,9 @@ void desktop_launch_application(int app_index) {
         // Settings already initialised at boot; just make its window visible
         extern void settings_draw(void);
         settings_draw();
+    } else if (strcmp(app->command, "hardware_manager") == 0) {
+        extern void hardware_manager_init(void);
+        hardware_manager_init();
     } else {
         printf("Unknown app: %s\n", app->command);
     }

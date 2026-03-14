@@ -27,13 +27,13 @@ KERNEL_C = kernel/kernel.c kernel/memory.c kernel/interrupts.c kernel/keyboard.c
 	   kernel/pipe.c
 DRIVER_C = drivers/vga.c drivers/serial.c drivers/pci.c drivers/ata.c \
 	   drivers/rtl8139.c drivers/ac97.c drivers/rtc.c drivers/pit.c drivers/mouse.c \
-	   drivers/ahci.c
+	   drivers/ahci.c drivers/wifi.c drivers/bluetooth.c drivers/hdmi.c drivers/gpu.c
 LIBC_C = libc/string.c libc/stdio.c libc/stdlib.c libc/memory.c libc/assert.c
 GUI_C = gui/window.c gui/graphics.c gui/widgets.c gui/desktop.c gui/taskview.c \
 	gui/apps/terminal.c gui/apps/file_manager.c gui/apps/notepad.c gui/apps/control_panel.c \
 	gui/apps/time_applet.c gui/apps/virtual_keyboard.c gui/apps/settings.c \
 	gui/launcher.c gui/taskbar.c gui/input.c gui/compositor.c gui/notification.c \
-	gui/apps/package_manager.c
+	gui/apps/package_manager.c gui/apps/hardware_manager.c
 FS_C = fs/fat32.c fs/ext2.c fs/vfs.c fs/file.c
 NET_C = net/nic.c net/ethernet.c net/ip.c net/tcp.c net/udp.c net/dhcp.c net/dns.c net/icmp.c net/arp.c
 
